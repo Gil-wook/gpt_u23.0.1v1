@@ -1,0 +1,246 @@
+name: Build uLaunch HOS 23.0.1 diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/u23-diagnostics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: devkitpro/devkita64:latest
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git patch autoconf automake diffutils pkgconf fakeroot file tar bzip2 zstd \
+            python3 python3-requests python-is-python3 zip ca-certificates
+
+      - name: Fetch uLaunch source and pinned dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/XorTroll/uLaunch.git uLaunch-src
+          cd uLaunch-src
+          git checkout 6da94f9164f5fa61380010008270457f95ff4b04
+          git submodule update --init --recursive
+          git -C libs/Atmosphere-libs fetch origin cf48d23375cf36742876f4b014971b2ebabc6dc8
+          git -C libs/Atmosphere-libs checkout --detach cf48d23375cf36742876f4b014971b2ebabc6dc8
+          cd ..
+          git clone https://github.com/switchbrew/libnx.git libnx
+          git -C libnx checkout b156b4774fb2df7b93402169509266da7547fc4c
+          make -C libnx -j2
+          cp -r libnx/nx/external/bsd/include libnx/nx
+
+      - name: Apply early boot logging patch
+        shell: bash
+        env:
+          PATCH_B64: |
+            LS0tIGEvbGlicy91Q29tbW9uL3NvdXJjZS91bC91bF9SZXN1bHQuY3BwCisrKyBiL2xpYnMvdUNv
+            bW1vbi9zb3VyY2UvdWwvdWxfUmVzdWx0LmNwcApAQCAtMTcsNiArMTcsOCBAQAogICAgIG5hbWVz
+            cGFjZSB7CiAKICAgICAgICAgY2hhciBnX0xvZ1BhdGhbRlNfTUFYX1BBVEhdID0ge307CisgICAg
+            ICAgIC8vIElmIC91bGF1bmNoIGlzIG1pc3Npbmcgb3IgdW53cml0YWJsZSwga2VlcCBib290IGRp
+            YWdub3N0aWNzIGF0IHRoZSBTRCByb290LgorICAgICAgICBjaGFyIGdfRmFsbGJhY2tMb2dQYXRo
+            W0ZTX01BWF9QQVRIXSA9IHt9OwogICAgICAgICBNdXRleCBnX0xvZ0xvY2s7CiAKICAgICAgICAg
+            aW5saW5lIGNvbnN0IGNoYXIgKkZvcm1hdExvZ0tpbmQoY29uc3QgTG9nS2luZCBraW5kKSB7CkBA
+            IC03Niw2ICs3OCwxMCBAQAogICAgICAgICBjaGFyIHRtcF9sb2dfcGF0aFtGU19NQVhfUEFUSF0g
+            PSB7fTsKIAogICAgICAgICBfVUxfRE9fV0lUSF9GU0RFVih7CisgICAgICAgICAgICAvLyBFbnN1
+            cmUgdGhlIGxvZyBkaXJlY3RvcnkgZXhpc3RzIGJlZm9yZSB0cnlpbmcgdG8gcm90YXRlIG9yIGNy
+            ZWF0ZSBsb2dzLgorICAgICAgICAgICAgZnM6OkNyZWF0ZURpcmVjdG9yeShSb290UGF0aCk7Cisg
+            ICAgICAgICAgICBzbnByaW50ZihnX0ZhbGxiYWNrTG9nUGF0aCwgc2l6ZW9mKGdfRmFsbGJhY2tM
+            b2dQYXRoKSwgInNkbWM6L3VMYXVuY2hfYm9vdGRpYWdfJXMubG9nIiwgcHJvY19uYW1lKTsKKwog
+            ICAgICAgICAgICAgdTMyIGkgPSBNYXhMb2dGaWxlQ291bnQgLSAxOwogICAgICAgICAgICAgd2hp
+            bGUodHJ1ZSkgewogICAgICAgICAgICAgICAgIEZvcm1hdExvZ1BhdGgoZ19Mb2dQYXRoLCBwcm9j
+            X25hbWUsIGkpOwpAQCAtOTUsNyArMTAxLDIzIEBACiAgICAgICAgICAgICAgICAgaS0tOwogICAg
+            ICAgICAgICAgfQogCi0gICAgICAgICAgICAvLyBMb29wIGVuZHMgd2l0aCBpZHggMCBmb3JtYXR0
+            ZWQsIHdoaWNoIGlzIHdoYXQgd2Ugd2FudAorICAgICAgICAgICAgLy8gQ3JlYXRlIGEgZmlsZSBp
+            bW1lZGlhdGVseS4gUHJldmlvdXNseSB0aGUgZmlsZSBkaWQgbm90IGV4aXN0IHVudGlsIHRoZQor
+            ICAgICAgICAgICAgLy8gZmlyc3QgbGF0ZXIgTG9nSW1wbCgpIGNhbGwsIGhpZGluZyBmYWlsdXJl
+            cyBiZXR3ZWVuIGxvZ2dlciBzZXR1cCBhbmQgTWFpbigpLgorICAgICAgICAgICAgYXV0byBmaWxl
+            ID0gZm9wZW4oZ19Mb2dQYXRoLCAid2IiKTsKKyAgICAgICAgICAgIGlmKGZpbGUpIHsKKyAgICAg
+            ICAgICAgICAgICBmcHJpbnRmKGZpbGUsICJbQk9PVFRSQUNFXSBMT0dHRVJfUkVBRFkgcHJvY2Vz
+            cz0lc1xuIiwgcHJvY19uYW1lKTsKKyAgICAgICAgICAgICAgICBmZmx1c2goZmlsZSk7CisgICAg
+            ICAgICAgICAgICAgZmNsb3NlKGZpbGUpOworICAgICAgICAgICAgfQorICAgICAgICAgICAgZWxz
+            ZSB7CisgICAgICAgICAgICAgICAgLy8gS2VlcCBhIGRpYWdub3N0aWMgdHJhaWwgZXZlbiBpZiBz
+            ZG1jOi91bGF1bmNoIGNhbm5vdCBiZSB3cml0dGVuLgorICAgICAgICAgICAgICAgIGZpbGUgPSBm
+            b3BlbihnX0ZhbGxiYWNrTG9nUGF0aCwgIndiIik7CisgICAgICAgICAgICAgICAgaWYoZmlsZSkg
+            eworICAgICAgICAgICAgICAgICAgICBmcHJpbnRmKGZpbGUsICJbQk9PVFRSQUNFXSBMT0dHRVJf
+            RkFMTEJBQ0sgcHJvY2Vzcz0lcyBwcmltYXJ5PSVzXG4iLCBwcm9jX25hbWUsIGdfTG9nUGF0aCk7
+            CisgICAgICAgICAgICAgICAgICAgIGZmbHVzaChmaWxlKTsKKyAgICAgICAgICAgICAgICAgICAg
+            ZmNsb3NlKGZpbGUpOworICAgICAgICAgICAgICAgIH0KKyAgICAgICAgICAgIH0KICAgICAgICAg
+            fSk7CiAgICAgfQogCkBAIC0xMTAsNiArMTMyLDkgQEAKICAgICAgICAgdmFfc3RhcnQoYXJncywg
+            bG9nX2ZtdCk7CiAgICAgICAgIF9VTF9ET19XSVRIX0ZTREVWKHsKICAgICAgICAgICAgIGF1dG8g
+            ZmlsZSA9IGZvcGVuKGdfTG9nUGF0aCwgImFiKyIpOworICAgICAgICAgICAgaWYoIWZpbGUgJiYg
+            Z19GYWxsYmFja0xvZ1BhdGhbMF0gIT0gJ1wwJykgeworICAgICAgICAgICAgICAgIGZpbGUgPSBm
+            b3BlbihnX0ZhbGxiYWNrTG9nUGF0aCwgImFiKyIpOworICAgICAgICAgICAgfQogICAgICAgICAg
+            ICAgaWYoZmlsZSkgewogICAgICAgICAgICAgICAgIGlmKHNlcnZpY2VJc0FjdGl2ZSh0aW1lR2V0
+            U2VydmljZVNlc3Npb25fU3RlYWR5Q2xvY2soKSkpIHsKICAgICAgICAgICAgICAgICAgICAgY29u
+            c3QgYXV0byB0aW1lID0gb3M6OkdldEN1cnJlbnRUaW1lKCk7Ci0tLSBhL3Byb2plY3RzL3VTeXN0
+            ZW0vc291cmNlL21haW4uY3BwCisrKyBiL3Byb2plY3RzL3VTeXN0ZW0vc291cmNlL21haW4uY3Bw
+            CkBAIC0xNDY1LDEwICsxNDY1LDE1IEBACiAgICAgfQogCiAgICAgdm9pZCBJbml0aWFsaXplKCkg
+            eworICAgICAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIFMwMTogdVN5c3RlbTo6SW5pdGlhbGl6
+            ZSBlbnRlcmVkIik7CisgICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgUzAyOiBhcHBseWlu
+            ZyBpZGxlIHBvbGljeSBzZXR0aW5ncyIpOwogICAgICAgICBVTF9SQ19BU1NFUlQoYXBwbGV0TG9h
+            ZEFuZEFwcGx5SWRsZVBvbGljeVNldHRpbmdzKCkpOworICAgICAgICBVTF9MT0dfSU5GTygiQk9P
+            VFRSQUNFIFMwMzogaWRsZSBwb2xpY3kgc2V0dGluZ3MgYXBwbGllZCIpOwogICAgICAgICBVcGRh
+            dGVPcGVyYXRpb25Nb2RlKCk7CisgICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgUzA0OiBv
+            cGVyYXRpb24gbW9kZSB1cGRhdGVkIik7CiAKICAgICAgICAgZ19BbXNJc0VtdU1NQyA9IHVsOjpv
+            czo6SXNFbXVNTUMoKTsKKyAgICAgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBTMDU6IGVtdU1N
+            QyBkZXRlY3Rpb24gY29tcGxldGUgKGVtdU1NQz0lZCkiLCBnX0Ftc0lzRW11TU1DKTsKIAogICAg
+            ICAgICAvLyBDbGVhbiBvbGQgY2FjaGUKICAgICAgICAgdWw6OmZzOjpEZWxldGVEaXJlY3Rvcnko
+            dWw6OlByZVYxMDBBcHBsaWNhdGlvbkNhY2hlUGF0aCk7CkBAIC0xNDgyLDI3ICsxNDg3LDQwIEBA
+            CiAgICAgICAgIHVsOjpmczo6Q2xlYW5EaXJlY3RvcnkodWw6OkhvbWVicmV3Q2FjaGVQYXRoKTsK
+            ICAgICAgICAgdWw6OmZzOjpDbGVhbkRpcmVjdG9yeSh1bDo6VGhlbWVQcmV2aWV3Q2FjaGVQYXRo
+            KTsKIAorICAgICAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIFMwNjogbGlzdGluZyBhcHBsaWNh
+            dGlvbiByZWNvcmRzIik7CiAgICAgICAgIGdfQ3VycmVudFJlY29yZHMgPSB1bDo6b3M6Okxpc3RB
+            cHBsaWNhdGlvblJlY29yZHMoKTsKKyAgICAgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBTMDc6
+            IGFwcGxpY2F0aW9uIHJlY29yZHMgbGlzdGVkIChjb3VudD0lenUpIiwgZ19DdXJyZW50UmVjb3Jk
+            cy5zaXplKCkpOwogICAgICAgICB1bDo6c3lzdGVtOjphcHA6OkluaXRpYWxpemVDb250cm9sQ2Fj
+            aGUoZ19DdXJyZW50UmVjb3Jkcyk7CisgICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgUzA4
+            OiBhcHBsaWNhdGlvbiBjb250cm9sIGNhY2hlIGluaXRpYWxpemVkIik7CiAgICAgICAgIHVsOjpt
+            ZW51OjpDYWNoZUhvbWVicmV3KCk7CisgICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgUzA5
+            OiBob21lYnJldyBjYWNoZSBpbml0aWFsaXplZCIpOwogICAgICAgICBDaGVja0hvbWVicmV3VGFr
+            ZW92ZXJBcHBsaWNhdGlvbklkKCk7CisgICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgUzEw
+            OiB0YWtlb3ZlciBhcHBsaWNhdGlvbiBjaGVjayBjb21wbGV0ZSIpOwogCiAgICAgICAgIC8vIFRl
+            c3QsIHVudGlsIHdlIGZpZ3VyZSBvdXQgaG93IHRvIGNoZWNrIGlmIGFwcHMgbmVlZCB1cGRhdGVz
+            CiAgICAgICAgIERlYnVnTG9nQXBwbGljYXRpb25QYXJhbWV0ZXJzKCk7CiAKKyAgICAgICAgVUxf
+            TE9HX0lORk8oIkJPT1RUUkFDRSBTMTE6IGxvYWRpbmcgY29uZmlnIik7CiAgICAgICAgIExvYWRD
+            b25maWcoKTsKKyAgICAgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBTMTI6IGNvbmZpZyBsb2Fk
+            ZWQiKTsKIAorICAgICAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIFMxMzogaW5pdGlhbGl6aW5n
+            IHByaXZhdGUgc2VydmljZSBmcmFtZXdvcmsiKTsKICAgICAgICAgVUxfUkNfQVNTRVJUKHNmOjpJ
+            bml0aWFsaXplKCkpOworICAgICAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIFMxNDogcHJpdmF0
+            ZSBzZXJ2aWNlIGZyYW1ld29yayBpbml0aWFsaXplZCIpOwogCisgICAgICAgIFVMX0xPR19JTkZP
+            KCJCT09UVFJBQ0UgUzE1OiBjcmVhdGluZyBldmVudCBtYW5hZ2VyIHRocmVhZCIpOwogICAgICAg
+            ICBVTF9SQ19BU1NFUlQodGhyZWFkQ3JlYXRlKCZnX0V2ZW50TWFuYWdlclRocmVhZCwgRXZlbnRN
+            YW5hZ2VyTWFpbiwgbnVsbHB0ciwgbnVsbHB0ciwgRXZlbnRNYW5hZ2VyVGhyZWFkU3RhY2tTaXpl
+            LCAzNCwgLTIpKTsKICAgICAgICAgVUxfUkNfQVNTRVJUKHRocmVhZFN0YXJ0KCZnX0V2ZW50TWFu
+            YWdlclRocmVhZCkpOworICAgICAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIFMxNjogZXZlbnQg
+            bWFuYWdlciB0aHJlYWQgc3RhcnRlZCIpOwogCiAgICAgICAgIGJvb2wgdmlld2VyX3VzYl9lbmFi
+            bGVkOwogICAgICAgICB7CiAgICAgICAgICAgICB1bDo6U2NvcGVkTG9jayBsayhnX0NvbmZpZ0xv
+            Y2spOwogICAgICAgICAgICAgVUxfQVNTRVJUX1RSVUUoZ19Db25maWcuR2V0RW50cnkodWw6OmNm
+            Zzo6Q29uZmlnRW50cnlJZDo6VXNiU2NyZWVuQ2FwdHVyZUVuYWJsZWQsIHZpZXdlcl91c2JfZW5h
+            YmxlZCkpOwogICAgICAgICB9CisgICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgUzE3OiBV
+            U0Igc2NyZWVuIGNhcHR1cmUgZW5hYmxlZD0lZCIsIHZpZXdlcl91c2JfZW5hYmxlZCk7CiAgICAg
+            ICAgIGlmKHZpZXdlcl91c2JfZW5hYmxlZCkgeworICAgICAgICAgICAgVUxfTE9HX0lORk8oIkJP
+            T1RUUkFDRSBTMTg6IGluaXRpYWxpemluZyBVU0Igc2NyZWVuIGNhcHR1cmUgc2VydmljZXMiKTsK
+            ICAgICAgICAgICAgIFVMX1JDX0FTU0VSVCh1c2JDb21tc0luaXRpYWxpemUoKSk7CiAgICAgICAg
+            ICAgICBVTF9SQ19BU1NFUlQoY2Fwc3NjSW5pdGlhbGl6ZSgpKTsKIApAQCAtMTU5OSwxMyArMTYx
+            NywxNyBAQAogICAgIC8vIHVTeXN0ZW0gaGFuZGxlcyBiYXNpYyBxbGF1bmNoIGZ1bmN0aW9uYWxp
+            dHkgc2luY2UgaXQgaXMgdGhlIGJhY2stZW5kIG9mIHRoZSBwcm9qZWN0LCBjb21tdW5pY2F0aW5n
+            IHdpdGggdU1lbnUgd2hlbiBuZWNjZXNzYXJ5CiAKICAgICB2b2lkIE1haW4oKSB7CisgICAgICAg
+            IFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgTTAwOiB1U3lzdGVtIE1haW4gZW50ZXJlZCIpOwogICAg
+            ICAgICAvLyBJbml0aWFsaXplIGV2ZXJ5dGhpbmcKICAgICAgICAgSW5pdGlhbGl6ZSgpOworICAg
+            ICAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIE0wMTogdVN5c3RlbSBJbml0aWFsaXplIHJldHVy
+            bmVkIik7CiAKICAgICAgICAgVUxfTE9HX0lORk8oIkhlbGxvIFdvcmxkIGZyb20gdVN5c3RlbSEg
+            TGF1bmNoaW5nIHVNZW51Li4uIik7CiAKICAgICAgICAgLy8gQWZ0ZXIgaGF2aW5nIGluaXRpYWxp
+            emVkIGV2ZXJ5dGhpbmcsIGxhdW5jaCBvdXIgbWVudQorICAgICAgICBVTF9MT0dfSU5GTygiQk9P
+            VFRSQUNFIE0wMjogTGF1bmNoTWVudSBiZWdpbiIpOwogICAgICAgICBVTF9SQ19BU1NFUlQoTGF1
+            bmNoTWVudSh1bDo6c21pOjpNZW51U3RhcnRNb2RlOjpTdGFydHVwTWVudVBvc3RCb290KSk7Cisg
+            ICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgTTAzOiBMYXVuY2hNZW51IHJldHVybmVkIHN1
+            Y2Nlc3NmdWxseSIpOwogCiAgICAgICAgIC8vIExvb3AgZm9yZXZlciwgc2luY2UgcWxhdW5jaCBz
+            aG91bGQgTkVWRVIgdGVybWluYXRlIChBTSB3b3VsZCBjcmFzaCBpbiB0aGF0IGNhc2UpCiAgICAg
+            ICAgIHdoaWxlKHRydWUpIHsKLS0tIGEvcHJvamVjdHMvdU1lbnUvc291cmNlL21haW4uY3BwCisr
+            KyBiL3Byb2plY3RzL3VNZW51L3NvdXJjZS9tYWluLmNwcApAQCAtNjAsNiArNjAsNyBAQAogICAg
+            ICAgICBfX2xpYm54X2luaXRfdGltZSgpOw0KIA0KICAgICAgICAgdWw6OkluaXRpYWxpemVMb2dn
+            aW5nKCJ1TWVudSIpOw0KKyAgICAgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBVMDA6IHVNZW51
+            IF9fYXBwSW5pdCBlbnRlcmVkIGFuZCBsb2dnZXIgaW5pdGlhbGl6ZWQiKTsNCiAgICAgICAgIFVM
+            X0xPR19JTkZPKCJBbGl2ZSEiKTsNCiANCiAgICAgICAgIFVMX1JDX0FTU0VSVChzZXRzeXNJbml0
+            aWFsaXplKCkpOw0KQEAgLTEyNSw2ICsxMjYsNyBAQAogICAgIHVsOjpzbWk6Ok1lbnVTdGFydE1v
+            ZGUgZ19TdGFydE1vZGU7DQogDQogICAgIHZvaWQgSW5pdGlhbGl6ZVNldHRpbmdzKCkgew0KKyAg
+            ICAgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBVMDE6IEluaXRpYWxpemVTZXR0aW5ncyBlbnRl
+            cmVkIik7DQogICAgICAgICBVTF9MT0dfSU5GTygiSW5pdGlhbGl6aW5nIHNldHRpbmdzLi4uIik7
+            DQogICAgICAgICBnX0dsb2JhbFNldHRpbmdzID0ge307DQogDQpAQCAtMjYwLDE1ICsyNjIsMjQg
+            QEAKICAgICAgICAgcmVuZGVyZXJfb3B0cy5BZGREZWZhdWx0U2hhcmVkRm9udChQbFNoYXJlZEZv
+            bnRUeXBlX05pbnRlbmRvRXh0KTsNCiAgICAgICAgIHJlbmRlcmVyX29wdHMuVXNlSW1hZ2UocHU6
+            OnVpOjpyZW5kZXI6OkltZ0FsbEZsYWdzKTsNCiANCisgICAgICAgIFVMX0xPR19JTkZPKCJCT09U
+            VFJBQ0UgVTEwOiBjcmVhdGluZyByZW5kZXJlciIpOw0KICAgICAgICAgYXV0byByZW5kZXJlciA9
+            IHB1Ojp1aTo6cmVuZGVyOjpSZW5kZXJlcjo6TmV3KHJlbmRlcmVyX29wdHMpOw0KKyAgICAgICAg
+            VUxfTE9HX0lORk8oIkJPT1RUUkFDRSBVMTE6IHJlbmRlcmVyIGNyZWF0ZWQiKTsNCiAgICAgICAg
+            IGdfTWVudUFwcGxpY2F0aW9uID0gdWw6Om1lbnU6OnVpOjpNZW51QXBwbGljYXRpb246Ok5ldyhy
+            ZW5kZXJlcik7DQorICAgICAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIFUxMjogTWVudUFwcGxp
+            Y2F0aW9uIG9iamVjdCBjcmVhdGVkIik7DQogDQorICAgICAgICBVTF9MT0dfSU5GTygiQk9PVFRS
+            QUNFIFUxMzogaW5pdGlhbGl6aW5nIGF1ZGlvIik7DQogICAgICAgICBVTF9BU1NFUlRfVFJVRShw
+            dTo6YXVkaW86OkluaXRpYWxpemUoTUlYX0lOSVRfTVAzKSk7DQorICAgICAgICBVTF9MT0dfSU5G
+            TygiQk9PVFRSQUNFIFUxNDogYXVkaW8gaW5pdGlhbGl6ZWQiKTsNCiANCisgICAgICAgIFVMX0xP
+            R19JTkZPKCJCT09UVFJBQ0UgVTE1OiBpbml0aWFsaXppbmcgbWVudSBhcHBsaWNhdGlvbiIpOw0K
+            ICAgICAgICAgZ19NZW51QXBwbGljYXRpb24tPkluaXRpYWxpemUoZ19TdGFydE1vZGUpOw0KKyAg
+            ICAgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBVMTY6IG1lbnUgYXBwbGljYXRpb24gaW5pdGlh
+            bGl6ZWQiKTsNCiAgICAgICAgIHVsOjptZW51Ojp1aTo6UmVnaXN0ZXJNZW51T25NZXNzYWdlRGV0
+            ZWN0KCk7DQogICAgICAgICBVTF9SQ19BU1NFUlQodWw6Om1lbnU6OnNtaTo6c2Y6OkluaXRpYWxp
+            emVQcml2YXRlU2VydmljZSgpKTsNCisgICAgICAgIFVMX0xPR19JTkZPKCJCT09UVFJBQ0UgVTE3
+            OiBsb2FkaW5nIG1lbnUgY29udGVudCIpOw0KICAgICAgICAgVUxfUkNfQVNTRVJUKGdfTWVudUFw
+            cGxpY2F0aW9uLT5Mb2FkKCkpOw0KKyAgICAgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBVMTg6
+            IG1lbnUgY29udGVudCBsb2FkZWQiKTsNCiANCiAgICAgICAgIC8vIEluaXRpYWxpemUgdVN5c3Rl
+            bSBtZXNzYWdlIGhhbmRsaW5nIChuZWVkIHRvIGRvIGl0IGFmdGVyIExvYWQgc28gdGhhdCB0aGUg
+            bWVzc2FnZSBoYW5kbGVycyBhcmUgcmVnaXN0ZXJlZCkNCiAgICAgICAgIC8vIFVMX1JDX0FTU0VS
+            VCh1bDo6bWVudTo6c21pOjpzZjo6SW5pdGlhbGl6ZVByaXZhdGVTZXJ2aWNlKCkpOyANCkBAIC0y
+            OTMsNyArMzA0LDkgQEAKIC8vIHVNZW51IHByb2NlZHVyZTogcmVhZCBzZW50IHN0b3JhZ2VzLCBp
+            bml0aWFsaXplIFJvbUZzIChleHRlcm5hbGx5KSwgbG9hZCBjb25maWcgYW5kIG90aGVyIHN0dWZm
+            LCBmaW5hbGx5IGNyZWF0ZSB0aGUgcmVuZGVyZXIgYW5kIHN0YXJ0IHRoZSBVSQ0KIA0KIGludCBt
+            YWluKCkgew0KKyAgICBVTF9MT0dfSU5GTygiQk9PVFRSQUNFIFUwMjogdU1lbnUgbWFpbiBlbnRl
+            cmVkIik7DQogICAgIEluaXRpYWxpemVTZXR0aW5ncygpOw0KKyAgICBVTF9MT0dfSU5GTygiQk9P
+            VFRSQUNFIFUwMzogSW5pdGlhbGl6ZVNldHRpbmdzIHJldHVybmVkIik7DQogDQogICAgIFVMX1JD
+            X0FTU0VSVCh1bDo6bWVudTo6YW06OlJlYWRTdGFydE1vZGUoZ19TdGFydE1vZGUpKTsNCiAgICAg
+            VUxfQVNTRVJUX1RSVUUoZ19TdGFydE1vZGUgIT0gdWw6OnNtaTo6TWVudVN0YXJ0TW9kZTo6SW52
+            YWxpZCk7DQpAQCAtMzEwLDcgKzMyMyw5IEBACiAgICAgfQ0KIA0KICAgICAvLyBUcnkgdG8gbW91
+            bnQgaXQNCisgICAgVUxfTE9HX0lORk8oIkJPT1RUUkFDRSBVMDQ6IG1vdW50aW5nIG1lbnUgUm9t
+            RlMgZnJvbSAlcyIsIHVsOjpNZW51Um9tZnNGaWxlKTsNCiAgICAgVUxfUkNfQVNTRVJUKHJvbWZz
+            TW91bnRGcm9tRnNkZXYodWw6Ok1lbnVSb21mc0ZpbGUsIDAsICJyb21mcyIpKTsNCisgICAgVUxf
+            TE9HX0lORk8oIkJPT1RUUkFDRSBVMDU6IG1lbnUgUm9tRlMgbW91bnRlZCIpOw0KIA0KICAgICAv
+            LyBSZWdpc3RlciBoYW5kbGVycyBmb3IgSE9NRSBidXR0b24gcHJlc3MgZGV0ZWN0aW9uDQogICAg
+            IHVsOjptZW51OjphbTo6UmVnaXN0ZXJMaWJueExpYmFwcGxldEhvbWVCdXR0b25EZXRlY3Rpb24o
+            KTsNCg==
+        run: |
+          set -euo pipefail
+          printf '%s' "$PATCH_B64" | base64 -d > /tmp/uLaunch-HOS23-boottrace.patch
+          cd uLaunch-src
+          git apply --check /tmp/uLaunch-HOS23-boottrace.patch
+          git apply /tmp/uLaunch-HOS23-boottrace.patch
+          echo "Diagnostic patch applied to $(git rev-parse --short HEAD)"
+
+      - name: Build diagnostic binaries and package SD files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd uLaunch-src
+          make -j2 LIBNX="$GITHUB_WORKSPACE/libnx/nx/" usystem uloader umenu umanager default-theme-music 2>&1 | tee uLaunch-diagnostic-build.log
+          test -s SdOut/atmosphere/contents/0100000000001000/exefs.nsp
+          test -s SdOut/ulaunch/bin/uMenu/main
+          test -s SdOut/ulaunch/bin/uLoader/applet/main
+          test -s SdOut/switch/uManager.nro
+          cd SdOut
+          zip -qr "$GITHUB_WORKSPACE/u23-diagnostics-test2.zip" atmosphere ulaunch switch
+          unzip -t "$GITHUB_WORKSPACE/u23-diagnostics-test2.zip"
+          sha256sum "$GITHUB_WORKSPACE/u23-diagnostics-test2.zip" | tee "$GITHUB_WORKSPACE/u23-diagnostics-test2.sha256"
+
+      - name: Upload test ZIP
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: u23-diagnostics-test2
+          path: |
+            u23-diagnostics-test2.zip
+            u23-diagnostics-test2.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: u23-diagnostics-build-log
+          path: uLaunch-src/uLaunch-diagnostic-build.log
+          if-no-files-found: ignore
+          retention-days: 14
